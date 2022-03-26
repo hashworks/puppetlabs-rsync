@@ -81,7 +81,7 @@ define rsync::server::module (
 
   concat::fragment { "frag-${name}":
     content => template('rsync/module.erb'),
-    target  => $rsync::server::conf_file,
+    target  => $rsync::server::node_conf_file,
     order   => $order,
   }
 }

@@ -15,29 +15,42 @@ class rsync::server(
   $uid        = 'nobody',
   $gid        = 'nobody',
   $modules    = {},
+  Optional[String[1]] $conf_file = undef,
+  Optional[String[1]] $servicename = undef,
 ) inherits rsync {
 
-  case $facts['os']['family'] {
-    'Debian': {
-      $conf_file = '/etc/rsyncd.conf'
-      $servicename = 'rsync'
+  if !$conf_file and !$servicename {
+    case $facts['os']['family'] {
+      'Debian': {
+        $node_conf_file = '/etc/rsyncd.conf'
+        $node_servicename = 'rsync'
+      }
+      'Suse': {
+        $node_conf_file = '/etc/rsyncd.conf'
+        $node_servicename = 'rsyncd'
+      }
+      'RedHat': {
+        $node_conf_file = '/etc/rsyncd.conf'
+        $node_servicename = 'rsyncd'
+      }
+      'FreeBSD': {
+        $node_conf_file = '/usr/local/etc/rsync/rsyncd.conf'
+        $node_servicename = 'rsyncd'
+      }
+      'Archlinux': {
+        $node_conf_file = '/etc/rsyncd.conf'
+        $node_servicename = 'rsyncd'
+      }
+      default: {
+        $node_conf_file = '/etc/rsync.conf'
+        $node_servicename = 'rsync'
+      }
     }
-    'Suse': {
-      $conf_file = '/etc/rsyncd.conf'
-      $servicename = 'rsyncd'
-    }
-    'RedHat': {
-      $conf_file = '/etc/rsyncd.conf'
-      $servicename = 'rsyncd'
-    }
-    'FreeBSD': {
-      $conf_file = '/usr/local/etc/rsync/rsyncd.conf'
-      $servicename = 'rsyncd'
-    }
-    default: {
-      $conf_file = '/etc/rsync.conf'
-      $servicename = 'rsync'
-    }
+  } elsif $conf_file and $servicename{
+    $node_conf_file = $conf_file
+    $node_servicename = $servicename
+  } else {
+    fail('Either both or none of conf_file and servicename must be set')
   }
 
   if $use_xinetd {
@@ -46,7 +59,7 @@ class rsync::server(
       bind        => $address,
       port        => '873',
       server      => '/usr/bin/rsync',
-      server_args => "--daemon --config ${conf_file}",
+      server_args => "--daemon --config ${node_conf_file}",
       require     => Package['rsync'],
     }
   } else {
@@ -55,16 +68,16 @@ class rsync::server(
         ($rsync::manage_package) {
       package { 'rsync-daemon':
         ensure => $rsync::package_ensure,
-        notify => Service[$servicename],
+        notify => Service[$node_servicename],
       }
     }
 
-    service { $servicename:
+    service { $node_servicename:
       ensure     => running,
       enable     => true,
       hasstatus  => true,
       hasrestart => true,
-      subscribe  => Concat[$conf_file],
+      subscribe  => Concat[$node_conf_file],
     }
 
     if ( $facts['os']['family'] == 'Debian' ) {
@@ -81,14 +94,14 @@ class rsync::server(
     }
   }
 
-  concat { $conf_file: }
+  concat { $node_conf_file: }
 
   # Template uses:
   # - $use_chroot
   # - $address
   # - $motd_file
   concat::fragment { 'rsyncd_conf_header':
-    target  => $conf_file,
+    target  => $node_conf_file,
     content => template('rsync/header.erb'),
     order   => '00_header',
   }
